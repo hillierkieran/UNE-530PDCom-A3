@@ -1,99 +1,168 @@
 #include "convolution.h"
 #include "headers.h"
 
-int main(int argc, char** argv) {
-    int me, nproc;
-    int** matrix;
-    int matrix_size, depth;
+int main(int argc, char** argv)
+{
+    int me, nproc, depth, matrix_size = -1;
+    int** matrix = NULL;
     char* input_file;
     char* output_file;
 
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &me);
-    MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+    int mpi_err;
 
-    // Usage: [executable] [input file] [output file] [depth]
+    mpi_err = MPI_Init(&argc, &argv);
+    if (mpi_err != MPI_SUCCESS) {
+        fprintf(stderr, "Error initializing MPI.\n");
+        MPI_Abort(MPI_COMM_WORLD, mpi_err);
+    }
+
+    // Set MPI to return errors rather than directly terminating the application
+    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+
+    mpi_err = MPI_Comm_rank(MPI_COMM_WORLD, &me);
+    if (mpi_err != MPI_SUCCESS) {
+        fprintf(stderr, "Error getting process rank.\n");
+        MPI_Abort(MPI_COMM_WORLD, mpi_err);
+    }
+
+    mpi_err = MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+    if (mpi_err != MPI_SUCCESS) {
+        fprintf(stderr, "Error getting number of processes.\n");
+        MPI_Abort(MPI_COMM_WORLD, mpi_err);
+    }
+
+    // Parse args
     if (argc != 4 || (depth = atoi(argv[3])) <= 0) {
         fprintf(stderr, "Usage: %s [input_file] [output_file] [depth]\n",
                 argv[0]);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
-    input_file = argv[1];
-    output_file = argv[2];
-    matrix_size = get_matrix_size(input_file);
 
-    // Initialize matrix for master process
+    // Master process initialises matrix from file
     if (me == MASTER) {
+        input_file = argv[1];
+        output_file = argv[2];
+
+        matrix_size = get_matrix_size(input_file);
+        if (matrix_size <= 0) {
+            fprintf(stderr, "Failed to get matrix size from file: %s\n", input_file);
+            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        }
+
         matrix = read_matrix_from_file(input_file, matrix_size);
-    }
-
-    // Split matrix rows among processes
-    int rows_per_process = matrix_size / nproc;
-    // Add given depth of neighbouring rows
-    int rows_required = rows_per_process + 2 * depth;
-
-    int start_row = me * rows_per_process - depth;
-    int end_row = start_row + rows_required;
-
-    // Allocate space for each process's sub-matrix
-    int** local_matrix = allocate_matrix(rows_per_process, matrix_size);
-
-    // Send sub-matrices to slave processes
-    for (int i = start_row; i < end_row; i++) {
-        MPI_Bcast(matrix[i], matrix_size, MPI_INT, MASTER, MPI_COMM_WORLD);
-    }
-/*
-    // Send sub-matrices to slave processes
-    MPI_Scatter(matrix,                         // send buffer
-                rows_per_process * matrix_size, // elements in send buffer
-                MPI_INT,                        // send data type
-                local_matrix,                   // receive buffer
-                rows_per_process * matrix_size, // elements in receive buffer
-                MPI_INT,                        // receive data type
-                MASTER,                         // rank of root process
-                MPI_COMM_WORLD);                // communicator 
-*/
-    // Each process applies the convolution filter
-    int** processed_local_matrix = allocate_matrix(rows_per_process, matrix_size);
-    for (int i = 0; i < rows_per_process; i++) {
-        for (int j = 0; j < matrix_size; j++) {
-            processed_local_matrix[i][j] = 
-                apply_convolution(local_matrix, rows_required, i + depth, j, depth);
+        if (!matrix) {
+            fprintf(stderr, "Failed to read matrix from file: %s\n", input_file);
+            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
     }
 
-    // Master process handles leftovers from uneven division of rows
+    // Broadcast the matrix size from master to all processes
+    mpi_err = MPI_Bcast(&matrix_size, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+    if (mpi_err != MPI_SUCCESS) {
+        fprintf(stderr, "Error broadcasting matrix size.\n");
+        MPI_Abort(MPI_COMM_WORLD, mpi_err);
+    }
+
+    // Compute portion of the matrix each process will handle
+    int local_rows = matrix_size / nproc;
+    int local_neighbourhood = local_rows + (depth * 2);
+    int start_row = (me * local_rows) - depth;
+    int end_row = start_row + local_neighbourhood;
+
+    // All processes allocate space for their local matrices
+    int** local_matrix = allocate_matrix(local_neighbourhood, matrix_size);
+    int** processed_local_matrix = allocate_matrix(local_rows, matrix_size);
+    if (!local_matrix || !processed_local_matrix) {
+        fprintf(stderr, "Failed to allocate memory for local matrices");
+        cleanup(matrix, matrix_size,
+                local_matrix, local_neighbourhood,
+                processed_local_matrix, local_rows)
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
+    // Master process distributes portions among processes
     if (me == MASTER) {
-        int leftover_start = rows_per_process * nproc;
-        for (int i = leftover_start; i < matrix_size; i++) {
-            for (int j = 0; j < matrix_size; j++) {
-                matrix[i][j] = apply_convolution(matrix, matrix_size, i, j, depth);
+        for (int proc = 0; proc < nproc; proc++) {
+            int start = proc * local_rows - depth;
+            int end = start + local_neighbourhood;
+            for (int i = start; i < end; i++) {
+                mpi_err = MPI_Send(
+                            matrix[i],      // send buffer
+                            matrix_size,    // elements in send buffer
+                            MPI_BYTE,       // send data type
+                            proc,           // rank of destination process
+                            0,              // message tag
+                            MPI_COMM_WORLD  // communicator
+                        );
+                if (mpi_err != MPI_SUCCESS) {
+                    fprintf(stderr, "Error sending matrix row %d to process %d.\n", i, proc);
+                    MPI_Abort(MPI_COMM_WORLD, mpi_err);
+                }
             }
         }
     }
 
-    // Gather the processed sub-matrices at master process
-    if (me == MASTER) {
-        matrix = allocate_matrix(matrix_size, matrix_size);
+    // All processes receive their portion of the matrix
+    for (int i = 0; i < local_neighbourhood; i++) {
+        mpi_err = MPI_Recv(
+                    local_matrix[i],    // receive buffer
+                    matrix_size,        // elements in receive buffer
+                    MPI_BYTE,           // receive data type
+                    MASTER,             // rank of source process
+                    0,                  // message tag
+                    MPI_COMM_WORLD,     // communicator
+                    MPI_STATUS_IGNORE   // status object
+                );
+        if (mpi_err != MPI_SUCCESS) {
+            fprintf(stderr, "Error receiving matrix row %d from master process.\n", i);
+            MPI_Abort(MPI_COMM_WORLD, mpi_err);
+        }
     }
-    MPI_Gather( processed_local_matrix,         // send buffer
-                rows_per_process * matrix_size, // elements in send buffer
-                MPI_INT,                        // send data type
-                matrix,                         // receive buffer
-                rows_per_process * matrix_size, // elements in receive buffer
-                MPI_INT,                        // receive data type
-                MASTER,                         // rank of root process
-                MPI_COMM_WORLD);                // communicator 
+
+    // All processes apply the convolution filter on their portion
+    int weightedSum; 
+    for (int row = depth; row < local_rows + depth; row++) {
+        for (int col = 0; col < matrix_size; col++) {
+            weightedSum = apply_convolution(local_matrix, local_neighbourhood,
+                                            row, col, depth);
+            if (weightedSum < 0) {
+                fprintf(stderr, "Error in apply_convolution at row %d and col %d.\n", row, col);
+                cleanup(matrix, matrix_size,
+                        local_matrix, local_neighbourhood,
+                        processed_local_matrix, local_rows);
+                MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+            }
+            processed_local_matrix[row][col] = weightedSum;
+        }
+    }
+
+    // Gather the processed sub-matrix portions at master process
+    mpi_err = MPI_Gather(
+                processed_local_matrix,     // send buffer
+                local_rows * matrix_size,   // elements in send buffer
+                MPI_BYTE,                   // send data type
+                matrix,                     // receive buffer
+                local_rows * matrix_size,   // elements in receive buffer
+                MPI_BYTE,                   // receive data type
+                MASTER,                     // rank of destination process
+                MPI_COMM_WORLD              // communicator
+            );
+    if (mpi_err != MPI_SUCCESS) {
+        fprintf(stderr, "Error gathering data from processes.\n");
+        MPI_Abort(MPI_COMM_WORLD, mpi_err);
+    }
 
     // Master process writes the output matrix to a file
     if (me == MASTER) {
-        write_matrix_to_file(output_file, matrix, matrix_size);
-        free_matrix(matrix, matrix_size);  // Deallocate memory for the matrix
+        if (write_matrix_to_file(output_file, matrix, matrix_size) != 0) {
+            fprintf(stderr, "Failed to write matrix to output file %s.\n", output_file);
+        }
     }
 
-    // Deallocate memory for the local matrices
-    free_matrix(local_matrix, rows_per_process);
-    free_matrix(processed_local_matrix, rows_per_process);
+    // All processes deallocate memory for all their matrices
+    cleanup(matrix, matrix_size,
+            local_matrix, local_neighbourhood,
+            processed_local_matrix, local_rows);
 
     MPI_Finalize();
     return EXIT_SUCCESS;
