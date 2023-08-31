@@ -14,7 +14,8 @@
  */
 
 // Gets the size of the matrix from the file.
-int get_matrix_size(const char* filename) {
+int get_matrix_size(const char* filename)
+{
     struct stat st;
 
     // Get file size
@@ -33,7 +34,8 @@ int get_matrix_size(const char* filename) {
 }
 
 // Deallocates the space used by the matrix.
-void free_matrix(int** matrix, int rows) {
+void free_matrix(int** matrix, int rows)
+{
     for (int i = 0; i < rows; i++) {
         free(matrix[i]);
     }
@@ -41,24 +43,49 @@ void free_matrix(int** matrix, int rows) {
 }
 
 void cleanup(int** matrix, int matrix_size, 
-            int** local_matrix, int local_rows, 
-            int** processed_local_matrix, int processed_rows) {
-
+            int** input_submatrix, int input_submatrix_rows, 
+            int** output_submatrix, int output_submatrix_rows,
+            int* cells_per_process, int* starts_per_process)
+{
     if (matrix) {
         free_matrix(matrix, matrix_size);
     }
 
-    if (local_matrix) {
-        free_matrix(local_matrix, local_rows);
+    if (input_submatrix) {
+        free_matrix(input_submatrix, input_submatrix_rows);
     }
 
-    if (processed_local_matrix) {
-        free_matrix(processed_local_matrix, processed_rows);
+    if (output_submatrix) {
+        free_matrix(output_submatrix, output_submatrix_rows);
+    }
+
+    if (cells_per_process) {
+        free(cells_per_process);
+    }
+
+    if (starts_per_process) {
+        free(starts_per_process);
+    }
+}
+
+
+// Computes sub-matrix portion for a process
+void compute_local_rows(int proc_rank, int rows, int depth, 
+                        int matrix_size, int *start_row, int *end_row)
+{
+    *start_row = (proc_rank * rows) - depth;
+    if (*start_row < 0) {
+        *start_row = 0;
+    }
+    *end_row = *start_row + rows + (depth * 2);
+    if (*end_row > matrix_size) {
+        *end_row = matrix_size;
     }
 }
 
 // Allocates space for a matrix of size rows x cols.
-int** allocate_matrix(int rows, int cols) {
+int** allocate_matrix(int rows, int cols)
+{
     int** matrix = (int**) malloc(rows * sizeof(int*));
     if (!matrix) {
         return NULL;
@@ -76,7 +103,8 @@ int** allocate_matrix(int rows, int cols) {
 }
 
 // Reads the matrix from a file.
-int** read_matrix_from_file(const char* filename, int matrix_size) {
+int** read_matrix_from_file(const char* filename, int matrix_size)
+{
     int fd = open(filename, O_RDONLY);
     if (fd == -1) {
         perror("Failed to open file");
@@ -108,7 +136,8 @@ int** read_matrix_from_file(const char* filename, int matrix_size) {
 }
 
 // Writes the matrix to a file.
-int write_matrix_to_file(const char* filename, int** matrix, int matrix_size) {
+int write_matrix_to_file(const char* filename, int** matrix, int matrix_size)
+{
     int fd = open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd == -1) {
         perror("Failed to open or create file");
