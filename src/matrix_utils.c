@@ -15,41 +15,44 @@
  */
 
 // Deallocates the space used by the matrix.
-void free_matrix(int **matrix, int rows)
+void free_matrix(int ***matrix, int rows)
 {
-    if (matrix) {
+    if (*matrix) {
         for (int i = 0; i < rows; i++) {
-            if (matrix[i]) {
-                free(matrix[i]);
+            if ((*matrix)[i]) {
+                free((*matrix)[i]);
             }
         }
-        free(matrix);
+        free(*matrix);
+        *matrix = NULL;
     }
 }
 
-void cleanup(int **matrix, int matrix_size, 
-            int **input_submatrix, int input_submatrix_rows, 
-            int **output_submatrix, int output_submatrix_rows,
-            int *cells_per_process, int *starts_per_process)
+void cleanup(int ***matrix, int matrix_size, 
+            int ***input_submatrix, int input_submatrix_rows, 
+            int ***output_submatrix, int output_submatrix_rows,
+            int **cells_per_process, int **starts_per_process)
 {
-    if (matrix) {
+    if (*matrix) {
         free_matrix(matrix, matrix_size);
     }
 
-    if (input_submatrix) {
+    if (*input_submatrix) {
         free_matrix(input_submatrix, input_submatrix_rows);
     }
 
-    if (output_submatrix) {
+    if (*output_submatrix) {
         free_matrix(output_submatrix, output_submatrix_rows);
     }
 
-    if (cells_per_process) {
-        free(cells_per_process);
+    if (*cells_per_process) {
+        free(*cells_per_process);
+        *cells_per_process = NULL;
     }
 
-    if (starts_per_process) {
-        free(starts_per_process);
+    if (*starts_per_process) {
+        free(*starts_per_process);
+        *starts_per_process = NULL;
     }
 }
 
@@ -91,9 +94,9 @@ int get_padding(int proc_rank, int matrix_rows, int depth,
         return -1;  // Invalid direction
     }
 
-    int padding_offset = rows_from_edge - depth;
-    if (rows_from_edge < depth) {
-        return rows_from_edge + padding_offset;
+    if (depth > rows_from_edge) {
+        int overflow = (rows_from_edge - depth) * -1;
+        return depth - overflow;
     }
 
     return depth;
