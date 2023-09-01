@@ -1,6 +1,6 @@
 #ifndef CONVOLUTION_H
 #define CONVOLUTION_H
 
-double apply_convolution(int** matrix, int matrix_size, int row, int col, int depth);
+int apply_convolution(int **matrix, int matrix_size, int row, int col, int depth);
 
 #endif /* CONVOLUTION_H */
