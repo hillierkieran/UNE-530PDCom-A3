@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
 bool is_valid_input(int **matrix, int matrix_size, int row, int col, int depth)
 {
     return  matrix != NULL && 
@@ -51,7 +53,7 @@ int apply_convolution(int **matrix, int matrix_size, int row, int col, int depth
 
                 // Determine the weight for this neighbour (ie. 1/n_depth)
                 // It's based on how far the neighbour is from the current cell.
-                double weight = 1.0 / (max(abs(row_offset), abs(col_offset)) + 1);
+                double weight = 1.0 / (fmax(abs(row_offset), abs(col_offset)) + 1);
 
                 // Add the weighted value of the neighbour to the sum
                 sum += matrix[neighbour_row][neighbour_col] * weight;

@@ -6,7 +6,7 @@
 #include "matrix.h"
 #include "matrix_utils.h"
 #define MASTER 0
-#define EMPTY -1
+#define EMPTY  0
 #define TRUE   1
 #define FALSE  0
 #define UP -1

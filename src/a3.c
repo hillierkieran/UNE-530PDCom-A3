@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 
 
     // Setup MPI (initialise, get rank and number of processes)
-    mpi_setup(argc, argv, &my_rank, &nproc);
+    mpi_setup(&argc, &argv, &my_rank, &nproc);
 
 
     // Parse args
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
         if (!cells_per_process || !starts_per_process) {
             fprintf(stderr, "Failed to allocate memory for cells_per_process or starts_per_process");
             cleanup(matrix, matrix_size,
-                    my_padded_submatrix, my_padded_rows, NULL, NULL,
+                    my_padded_submatrix, my_padded_rows, NULL, EMPTY,
                     cells_per_process, starts_per_process);
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
         for(int proc = 0; proc < nproc; proc++) {
             int top_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, UP);
             int bottom_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, DOWN);
-            int padded_portion = my_top_padding + rows_per_node + my_bottom_padding;
+            int padded_portion = top_padding + rows_per_node + bottom_padding;
 
             cells_per_process[proc] = padded_portion * matrix_size;
             starts_per_process[proc] = proc * rows_per_node - top_padding;
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
         starts_per_process,                 // array of start element per process
         MPI_INT,                            // send data type
         my_padded_submatrix[0],             // receive buffer 
-        cells_per_process,                  // elements in receive buffer
+        my_padded_rows * matrix_size,       // elements in receive buffer
         MPI_INT,                            // receive data type
         MASTER,                             // rank of source process
         MPI_COMM_WORLD                      // communicator
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     if (mpi_err != MPI_SUCCESS) {
         fprintf(stderr, "Error during Scatterv operation.\n");
         cleanup(matrix, matrix_size,
-                my_padded_submatrix, my_padded_rows, NULL, NULL,
+                my_padded_submatrix, my_padded_rows, NULL, EMPTY,
                 cells_per_process, starts_per_process);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
     );
     if (mpi_err != MPI_SUCCESS) {
         fprintf(stderr, "Error during Gather operation.\n");
-        cleanup(matrix, matrix_size, NULL, NULL,
+        cleanup(matrix, matrix_size, NULL, EMPTY,
                 my_processed_submatrix, rows_per_node, NULL, NULL);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }

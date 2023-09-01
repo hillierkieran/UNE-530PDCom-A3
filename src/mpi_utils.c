@@ -1,5 +1,6 @@
 #include "mpi.h"
 #include "mpi_utils.h"
+#include <stdio.h>
 
 void mpi_setup(int *argc, char ***argv, int *rank, int *nproc)
 {
@@ -12,7 +13,8 @@ void mpi_setup(int *argc, char ***argv, int *rank, int *nproc)
     }
 
     // Set MPI to return errors rather than directly terminating the application
-    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    //MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
     mpi_err = MPI_Comm_rank(MPI_COMM_WORLD, rank);
     if (mpi_err != MPI_SUCCESS) {

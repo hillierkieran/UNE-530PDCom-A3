@@ -139,7 +139,7 @@ int** read_matrix_from_file(const char *filename, int *matrix_size)
         return NULL;
     }
 
-    int **matrix = allocate_matrix(matrix_size, matrix_size);
+    int **matrix = allocate_matrix(*matrix_size, *matrix_size);
     if (!matrix) {
         perror("Failed to allocate memory for matrix");
         close(fd);
