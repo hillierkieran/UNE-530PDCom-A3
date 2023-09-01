@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "headers.h"
 
 /*
  * Utility functions for handling matrices stored in files.
@@ -71,7 +72,7 @@ int** allocate_matrix(int rows, int cols)
     return matrix;
 }
 
-int get_padding(int proc_rank, int matrix_size, int depth,
+int get_padding(int proc_rank, int matrix_rows, int depth,
                 int rows_per_node, int direction)
 {
     if (depth == 0)
@@ -80,21 +81,22 @@ int get_padding(int proc_rank, int matrix_size, int depth,
     int start_row = (proc_rank * rows_per_node);
     int end_row = start_row + rows_per_node;
 
-    if (direction < 0) {
-        int top_padding = start_row - depth;
-        if (top_padding < 0)
-            top_padding = 0;
-        return top_padding;
+    int rows_from_edge;  // Distance from the respective edge (top or bottom)
 
-    } else if (direction > 0) {
-        int bottom_padding = end_row + depth;
-        if (bottom_padding > matrix_size)
-            bottom_padding = matrix_size;
-        return bottom_padding;
-
+    if (direction == UP) {
+        rows_from_edge = start_row;
+    } else if (direction == DOWN) {
+        rows_from_edge = matrix_rows - end_row;
     } else {
-        return -1;
+        return -1;  // Invalid direction
     }
+
+    int padding_offset = rows_from_edge - depth;
+    if (rows_from_edge < depth) {
+        return rows_from_edge + padding_offset;
+    }
+
+    return depth;
 }
 
 // Computes sub-matrix portion for a process
@@ -146,19 +148,15 @@ int** read_matrix_from_file(const char *filename, int *matrix_size)
         return NULL;
     }
 
-    for (int row = 0; row < matrix_size; row++) {
-        for (int col = 0; col < matrix_size; col++) {
-            int cell_value;
-            if (get_slot(fd, matrix_size, row + 1, col + 1, &cell_value) == -1) {
-                fprintf(stderr, "Failed to get cell value at [%d][%d]\n", row + 1, col + 1);
-                // Cleanup operations
-                free_matrix(matrix, matrix_size);
-                close(fd);
-                return NULL;
-            }
-            matrix[row][col] = cell_value;
+    for (int row = 1; row <= *matrix_size; row++) { 
+        if (get_row(fd, *matrix_size, row, matrix[row-1]) == -1) {
+            fprintf(stderr, "Failed to get row %d\n", row);
+            free_matrix(matrix, *matrix_size);
+            close(fd);
+            return NULL;
         }
     }
+
     if (close(fd) == -1) {
         perror("Failed to close the file");
     }
@@ -176,7 +174,7 @@ int write_matrix_to_file(const char *filename, int **matrix, int matrix_size)
 
     for (int row = 0; row < matrix_size; row++) {
         for (int col = 0; col < matrix_size; col++) {
-            if (set_slot(fd, matrix_size, row + 1, col + 1, matrix[row][col]) == -1) {
+            if (set_slot(fd, matrix_size, row+1, col+1, matrix[row][col]) == -1) {
                 fprintf(stderr, "Failed to set cell value at [%d][%d]\n", row + 1, col + 1);
                 close(fd);
                 // unlink(filename);  // Delete the potentially corrupted file?
@@ -184,6 +182,7 @@ int write_matrix_to_file(const char *filename, int **matrix, int matrix_size)
             }
         }
     }
+
     if (close(fd) == -1) {
         perror("Failed to close the file");
         return -2;

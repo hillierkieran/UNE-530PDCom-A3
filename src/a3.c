@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 
     // Parse args
     if (argc != 4 || (depth = atoi(argv[3])) <= 0) {
-        fprintf(stderr, "Usage: %s [input] [output [depth]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [input] [output] [depth]\n", argv[0]);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
 
@@ -41,6 +41,19 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to read matrix from file: %s\n", input_filename);
             free_matrix(matrix, matrix_size);
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        }
+
+        // If zero depth, no work to do. Write input matrix to output file 
+        if (depth == 0) {
+        int result = write_matrix_to_file(output_filename, matrix, matrix_size);
+        if (result == -1) {
+            fprintf(stderr, "Failed to write matrix to output file %s.\n", output_filename);
+        } else if (result == -2) {
+            fprintf(stderr, "Failed to close the file after writing matrix to output file %s.\n", output_filename);
+        }
+        free_matrix(matrix, matrix_size);
+        MPI_Finalize();
+        return EXIT_SUCCESS;
         }
     }
 
@@ -88,8 +101,8 @@ int main(int argc, char **argv)
         }
 
         for(int proc = 0; proc < nproc; proc++) {
-            int top_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, UP);
-            int bottom_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, DOWN);
+            int top_padding = get_padding(proc, matrix_size, depth, rows_per_node, UP);
+            int bottom_padding = get_padding(proc, matrix_size, depth, rows_per_node, DOWN);
             int padded_portion = top_padding + rows_per_node + bottom_padding;
 
             cells_per_process[proc] = padded_portion * matrix_size;
@@ -139,8 +152,8 @@ int main(int argc, char **argv)
     // All processes apply the convolution filter on their portion
     for (int row = my_top_padding; row < rows_per_node - my_bottom_padding; row++) {
         for (int col = 0; col < matrix_size; col++) {
-            int sum = apply_convolution(my_padded_submatrix, my_padded_rows,
-                                        row, col, depth);
+            int sum = apply_convolution(row, col, my_padded_submatrix,
+                                        my_padded_rows, matrix_size, depth);
             if (sum < 0) {
                 fprintf(stderr, "Error in apply_convolution at row %d and col %d.\n", row, col);
                 cleanup(matrix, matrix_size,
