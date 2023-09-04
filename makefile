@@ -39,6 +39,7 @@ clean:
 	rm -r $(OBJDIR)
 
 run:
+	./$(OBJDIR)mkRandomMatrix $(OBJDIR)input_matrix 4
 	mpirun -np 2 $(OBJDIR)a3 $(OBJDIR)input_matrix $(OBJDIR)output_matrix 1
 
 .PHONY: clean run all directories

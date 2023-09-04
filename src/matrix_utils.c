@@ -226,7 +226,7 @@ char* matrix_to_string(int* matrix, int rows, int cols) {
     int offset = 0;
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            offset += sprintf(buffer + offset, "%3d ", matrix[i * cols + j]);
+            offset += sprintf(buffer + offset, "%5d ", matrix[i * cols + j]);
         }
         buffer[offset - 1] = '\n';  // Replace the last space with a newline
     }

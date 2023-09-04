@@ -41,8 +41,6 @@
  * @param fmt Formatting string (similar to printf).
  * @param ... Variadic arguments to fit the formatting string.
  */
-#define LOG(fmt, ...) do {
-            if (VERBOSE) fprintf(stderr, fmt, ##__VA_ARGS__); 
-        } while (0)
+#define LOG(fmt, ...) do { if (VERBOSE) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
 #endif /* HEADERS_H */
