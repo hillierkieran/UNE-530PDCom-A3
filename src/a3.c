@@ -13,11 +13,11 @@ int main(int argc, char **argv)
             my_bottom_padding,
             my_start_row,
             my_end_row,
-            *cells_per_process       = NULL,    // Number of rows per node
-            *starts_per_process      = NULL,    // Starting element per node
-            **matrix                 = NULL,    // Main matrix
-            **my_padded_submatrix    = NULL,    // Padded working sub-matrix
-            **my_processed_submatrix = NULL;    // Processed output sub-matrix
+            *cells_per_process      = NULL, // Number of rows per node
+            *starts_per_process     = NULL, // Starting element per node
+            *matrix                 = NULL, // Main matrix
+            *my_padded_submatrix    = NULL, // Padded working sub-matrix
+            *my_processed_submatrix = NULL; // Processed output sub-matrix
 
     char    *input_filename,    // Filename of input matrix
             *output_filename;   // Filename of output matrix
@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 
     // Parse args
     if (argc != 4 || (depth = atoi(argv[3])) < 0) {
-        fprintf(stderr, "Usage: %s [input] [output] [depth]\n", argv[0]);
+        LOG("Usage: %s [input] [output] [depth]\n", argv[0]);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
 
@@ -43,23 +43,25 @@ int main(int argc, char **argv)
             input_filename, output_filename, depth);
         matrix = read_matrix_from_file(input_filename, &matrix_size);
         if (matrix_size <= 0 || !matrix) {
-            fprintf(stderr, "Failed to read matrix from file: %s\n", input_filename);
-            free_matrix(&matrix, matrix_size);
+            LOG("Failed to read matrix from file: %s\n", input_filename);
+            safe_free(&matrix);
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
-        LOG("Master process read a %d by %d matrix from file\n", matrix_size, matrix_size);
+        LOG("Master process read a %dx%d matrix from file:\n%s",
+            matrix_size, matrix_size,
+            matrix_to_string(matrix, matrix_size, matrix_size));
 
         // If zero depth, no work to do. Write input matrix to output file 
         if (depth == 0) {
             LOG("Zero depth set. No work to do\n");
             int result = write_matrix_to_file(output_filename, matrix, matrix_size);
             if (result == -1) {
-                fprintf(stderr, "Failed to write matrix to output file %s.\n", output_filename);
+                LOG("Failed to write matrix to output file %s.\n", output_filename);
             } else if (result == -2) {
-                fprintf(stderr, "Failed to close the file after writing matrix to output file %s.\n", output_filename);
+                LOG("Failed to close the file after writing matrix to output file %s.\n", output_filename);
             }
             LOG("Master process wrote matrix to file\n");
-            free_matrix(&matrix, matrix_size);
+            safe_free(&matrix);
             MPI_Finalize();
             return EXIT_SUCCESS;
         }
@@ -69,9 +71,10 @@ int main(int argc, char **argv)
     // Broadcast the master matrix's size from master to all processes
     mpi_err = MPI_Bcast(&matrix_size, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during broadcast of matrix size.\n",
+        LOG("P%d experienced an error during broadcast of matrix size.\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
 
@@ -88,10 +91,10 @@ int main(int argc, char **argv)
         my_padded_rows <= 0 ||
         my_start_row < 0 ||
         my_end_row >= matrix_size) {
-        fprintf(stderr, "P%d experienced an error calculating padding\n",
+        LOG("P%d experienced an error calculating padding\n",
                 my_rank);
         if (my_rank == MASTER)
-            free_matrix(&matrix, matrix_size);
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
     LOG("P%d will handle %d rows starting at row %d and ending at row %d. "
@@ -103,31 +106,31 @@ int main(int argc, char **argv)
     // All processes allocate space for their padded submatrix
     my_padded_submatrix = allocate_matrix(my_padded_rows, matrix_size);
     if (!my_padded_submatrix) {
-        fprintf(stderr, "P%d experienced an error while allocating memory for their padded submatrix\n",
+        LOG("P%d experienced an error while allocating memory for their padded submatrix\n",
                 my_rank);
-        if (my_rank == MASTER) {
-            free_matrix(&matrix, matrix_size);
-        }
-        free_matrix(&my_padded_submatrix, my_padded_rows);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
     LOG("P%d has allocated their %dx%d padded submatix=%p "
         "(0,0=%d. %d,%d=%d)\n",
         my_rank, my_padded_rows, matrix_size, (void*)my_padded_submatrix,
-        my_padded_submatrix[0][0],
+        my_padded_submatrix[0],
         my_padded_rows-1, matrix_size-1, 
-        my_padded_submatrix[my_padded_rows-1][matrix_size-1]);
+        my_padded_submatrix[my_padded_rows-1 * matrix_size + matrix_size-1]);
 
 
     // Allocate space for cells_per_process and starts_per_process
-    cells_per_process  = (int *)malloc(nproc * sizeof(int));
-    starts_per_process = (int *)malloc(nproc * sizeof(int));
+    cells_per_process  = (int *) malloc(nproc * sizeof(int));
+    starts_per_process = (int *) malloc(nproc * sizeof(int));
     if (!cells_per_process || !starts_per_process) {
-        fprintf(stderr, "P%d experienced an error while allocating memory for cells_per_process or starts_per_process\n",
+        LOG("P%d experienced an error while allocating memory for cells_per_process or starts_per_process\n",
                 my_rank);
-        cleanup(&matrix, matrix_size, 
-                &my_padded_submatrix, my_padded_rows, NULL, EMPTY,
-                &cells_per_process, &starts_per_process);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
+        safe_free(&my_padded_submatrix);
+        safe_free(&cells_per_process);
+        safe_free(&starts_per_process);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
     LOG("P%d has allocated cells_per_process=%p and starts_per_process=%p\n",
@@ -154,16 +157,18 @@ int main(int argc, char **argv)
     // Broadcasting cells_per_process and starts_per_process to all processes
     mpi_err = MPI_Bcast(cells_per_process, nproc, MPI_INT, MASTER, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during broadcast of cells_per_process\n",
+        LOG("P%d experienced an error during broadcast of cells_per_process\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
     mpi_err = MPI_Bcast(starts_per_process, nproc, MPI_INT, MASTER, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during broadcast of starts_per_process\n",
+        LOG("P%d experienced an error during broadcast of starts_per_process\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
     LOG("P%d has received cells_per_process[me]=%d and starts_per_process[me]=%d\n",
@@ -190,9 +195,10 @@ int main(int argc, char **argv)
 
     mpi_err = MPI_Barrier(MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during mpi barrier.\n",
+        LOG("P%d experienced an error during mpi barrier.\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
 
@@ -204,46 +210,42 @@ int main(int argc, char **argv)
         cells_per_process,              // array of elements to each process
         starts_per_process,             // array of start element per process
         MPI_INT,                        // send data type
-        my_padded_submatrix[0],         // receive buffer 
+        my_padded_submatrix,         // receive buffer 
         my_padded_rows * matrix_size,   // elements in receive buffer
         MPI_INT,                        // receive data type
         MASTER,                         // rank of source process
         MPI_COMM_WORLD                  // communicator
     );
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during Scatterv operation.\n",
+        LOG("P%d experienced an error during Scatterv operation.\n",
                 my_rank);
-        cleanup(&matrix, matrix_size,
-                &my_padded_submatrix, my_padded_rows, NULL, EMPTY,
-                &cells_per_process, &starts_per_process);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
+        safe_free(&my_padded_submatrix);
+        safe_free(&cells_per_process);
+        safe_free(&starts_per_process);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
 
-    LOG("P%d expected data for rows %d to %d.\n",
-        my_rank, my_start_row, my_end_row);
-
-    LOG("P%d received data: Start(0,0) = %d, End(%d,%d) = %d\n", 
-        my_rank, 
-        my_padded_submatrix[0][0],
-        my_padded_rows-1, matrix_size-1,
-        my_padded_submatrix[my_padded_rows-1][matrix_size-1]);
+    LOG("P%d received data:\n%s", 
+        my_rank,
+        matrix_to_string(my_padded_submatrix, my_padded_rows, matrix_size));
 
 
-    free(cells_per_process);
-    cells_per_process = NULL;
-    free(starts_per_process);
-    starts_per_process = NULL;
+    safe_free(&cells_per_process);
+    safe_free(&starts_per_process);
     LOG("P%d has freed their cells_per_process and starts_per_process\n", my_rank);
 
 
     // All processes allocate space for their processed submatrix
     my_processed_submatrix = allocate_matrix(rows_per_node, matrix_size);
     if (!my_processed_submatrix) {
-        fprintf(stderr, "P%d experienced an error allocating memory for processed matrix",
+        LOG("P%d experienced an error allocating memory for processed matrix",
                 my_rank);
-        cleanup(&matrix, matrix_size,
-                &my_padded_submatrix, my_padded_rows,
-                &my_processed_submatrix, rows_per_node, NULL, NULL);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
+        safe_free(&my_padded_submatrix);
+        safe_free(&my_processed_submatrix);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
     LOG("P%d has allocated their %d-row by %d-col processed submatix=%p\n",
@@ -252,9 +254,10 @@ int main(int argc, char **argv)
 
     mpi_err = MPI_Barrier(MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during mpi barrier.\n",
+        LOG("P%d experienced an error during mpi barrier.\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
 
@@ -266,19 +269,20 @@ int main(int argc, char **argv)
             int sum = apply_convolution(row, col, my_padded_submatrix,
                                         my_padded_rows, matrix_size, depth);
             if (sum < 0) {
-                fprintf(stderr, "P%d experienced an error in apply_convolution at local row %d and col %d of their padded submatrix\n",
+                LOG("P%d experienced an error in apply_convolution at local row %d and col %d of their padded submatrix\n",
                         my_rank, row, col);
-                cleanup(&matrix, matrix_size,
-                        &my_padded_submatrix, my_padded_rows,
-                        &my_processed_submatrix, rows_per_node, NULL, NULL);
+                if (my_rank == MASTER)
+                    safe_free(&matrix);
+                safe_free(&my_padded_submatrix);
+                safe_free(&my_processed_submatrix);
                 MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
             }
-            my_processed_submatrix[row][col] = sum;
+            my_processed_submatrix[row * matrix_size + col] = sum;
         }
     }
     LOG("P%d has finished processing their submatix\n", my_rank);
 
-    free_matrix(&my_padded_submatrix, my_padded_rows);
+    safe_free(&my_padded_submatrix);
     LOG("P%d has freed their padded submatix. Waiting for gather call\n", my_rank);
 
     
@@ -298,47 +302,49 @@ int main(int argc, char **argv)
 
     mpi_err = MPI_Barrier(MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during mpi barrier.\n",
+        LOG("P%d experienced an error during mpi barrier.\n",
                 my_rank);
-        free_matrix(&matrix, matrix_size);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
 
 
     // Gather the processed sub-matrices at master process
     mpi_err = MPI_Gather(
-        my_processed_submatrix[0],         // send buffer
+        my_processed_submatrix,         // send buffer
         rows_per_node * matrix_size,    // number of elements in send buffer
         MPI_INT,                        // send data type
-        matrix[0],                         // receive buffer
+        matrix,                         // receive buffer
         matrix_size * matrix_size,    // number of elements in receive buffer
         MPI_INT,                        // receive data type
         MASTER,                         // rank of destination process
         MPI_COMM_WORLD                  // communicator
     );
     if (mpi_err != MPI_SUCCESS) {
-        fprintf(stderr, "P%d experienced an error during Gather operation.\n", my_rank);
-        cleanup(&matrix, matrix_size, NULL, EMPTY,
-                &my_processed_submatrix, rows_per_node, NULL, NULL);
+        LOG("P%d experienced an error during Gather operation.\n", my_rank);
+        if (my_rank == MASTER)
+            safe_free(&matrix);
+        safe_free(&my_processed_submatrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
-    LOG("P%d still here after data has been gathered\n", my_rank);
 
-
-    free_matrix(&my_processed_submatrix, rows_per_node);
+    safe_free(&my_processed_submatrix);
     LOG("P%d has freed their processed submatix\n", my_rank);
 
 
     // Master process writes the output matrix to a file
     if (my_rank == MASTER) {
+        LOG("Master process has gathered the final matrix:\n%s",
+            matrix_to_string(matrix, matrix_size, matrix_size));
         int result = write_matrix_to_file(output_filename, matrix, matrix_size);
         if (result == -1) {
-            fprintf(stderr, "Failed to write matrix to output file %s.\n", output_filename);
+            LOG("Failed to write matrix to output file %s.\n", output_filename);
         } else if (result == -2) {
-            fprintf(stderr, "Failed to close the file after writing matrix to output file %s.\n", output_filename);
+            LOG("Failed to close the file after writing matrix to output file %s.\n", output_filename);
         }
         LOG("Master process wrote matrix to file\n");
-        free_matrix(&matrix, matrix_size);
+        safe_free(&matrix);
     }
 
     

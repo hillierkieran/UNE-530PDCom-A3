@@ -12,7 +12,7 @@ bool is_valid_cell(int row, int col, int matrix_rows, int matrix_cols)
             col < matrix_cols;
 }
 
-bool is_valid_input(int row, int col, int **matrix,
+bool is_valid_input(int row, int col, int *matrix,
                     int matrix_rows, int matrix_cols, int depth)
 {
     return  matrix != NULL &&
@@ -22,7 +22,7 @@ bool is_valid_input(int row, int col, int **matrix,
             is_valid_cell(row, col, matrix_rows, matrix_cols);
 }
 
-int apply_convolution(  int row, int col, int **matrix, 
+int apply_convolution(  int row, int col, int *matrix, 
                         int matrix_rows, int matrix_cols, int depth)
 {
     if (!is_valid_input(row, col, matrix, matrix_rows, matrix_cols, depth)) {
@@ -34,12 +34,14 @@ int apply_convolution(  int row, int col, int **matrix,
     }
 
     if (depth == 0) {
-        return matrix[row][col];
+        return matrix[row * matrix_cols + col];
     }
 
+    /*
     fprintf(stderr, "Applying convolution to cell %d,%d from matrix:%p "
             "Starting value = %d\n",
-            row, col, (void*)matrix, matrix[row][col]);
+            row, col, (void*)matrix, matrix[row * matrix_cols + col]);
+    */
 
     int sum = 0;
     int row_offset, col_offset;
@@ -70,14 +72,16 @@ int apply_convolution(  int row, int col, int **matrix,
             double weight = 1 / n_depth;
 
             // Add the weighted value of the neighbour to the sum
-            sum += matrix[neighbour_row][neighbour_col] * weight;
+            sum += matrix[neighbour_row *matrix_cols + neighbour_col] * weight;
         }
     }
 
+    /*
     fprintf(stderr, "Convolution of cell %d,%d is complete. "
             "New value = %d\n",
             row, col, sum);
-    
+    */
+   
     // Return the final weighted sum of neighbours.
     return sum;
 }

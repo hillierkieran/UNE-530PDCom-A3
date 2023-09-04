@@ -6,66 +6,29 @@
  * - Provides functionality to read, write, allocate, and free matrices.
  */
 
-// Deallocates the space used by the matrix.
-void free_matrix(int ***matrix, int rows)
+int get_i(int row, int col, int matrix_cols)
 {
-    if (*matrix) {
-        for (int i = 0; i < rows; i++) {
-            if ((*matrix)[i]) {
-                free((*matrix)[i]);
-            }
-        }
-        free(*matrix);
-        *matrix = NULL;
-    }
+    return row * matrix_cols + col;
 }
 
-void cleanup(int ***matrix, int matrix_size, 
-            int ***input_submatrix, int input_submatrix_rows, 
-            int ***output_submatrix, int output_submatrix_rows,
-            int **cells_per_process, int **starts_per_process)
+// Deallocates the space used by the matrix.
+void safe_free(int **int_array)
 {
-    if (*matrix) {
-        free_matrix(matrix, matrix_size);
-    }
-
-    if (*input_submatrix) {
-        free_matrix(input_submatrix, input_submatrix_rows);
-    }
-
-    if (*output_submatrix) {
-        free_matrix(output_submatrix, output_submatrix_rows);
-    }
-
-    if (*cells_per_process) {
-        free(*cells_per_process);
-        *cells_per_process = NULL;
-    }
-
-    if (*starts_per_process) {
-        free(*starts_per_process);
-        *starts_per_process = NULL;
+    if (*int_array) {
+        free(*int_array);
+        *int_array = NULL;
     }
 }
 
 // Allocates space for a matrix of size rows x cols.
-int** allocate_matrix(int rows, int cols)
+int* allocate_matrix(int rows, int cols)
 {
-    int **matrix = (int**) calloc(rows, sizeof(int*));
-    if (!matrix) {
+    int *int_array = (int*) calloc(rows * cols, sizeof(int));
+    if (!int_array) {
+        LOG("Failed to allocate space");
         return NULL;
     }
-
-    for (int i = 0; i < rows; i++) {
-        matrix[i] = NULL;
-        matrix[i] = (int*) calloc(cols, sizeof(int));
-        if (!matrix[i]) {
-            // If allocation fails, free any previously allocated memory
-            free_matrix(&matrix, rows);
-            return NULL;
-        }
-    }
-    return matrix;
+    return int_array;
 }
 
 int get_padding(int proc_rank, int matrix_rows, int depth,
@@ -125,63 +88,89 @@ int get_matrix_size_from_file(const char *filename)
 }
 
 // Reads the matrix from a file.
-int** read_matrix_from_file(const char *filename, int *matrix_size)
-{
-    *matrix_size = get_matrix_size_from_file(filename);
-    if (!*matrix_size)
-        return NULL;
-
+int* read_matrix_from_file(const char *filename, int *size) {
     int fd = open(filename, O_RDONLY);
     if (fd == -1) {
-        perror("Failed to open file");
+        LOG("Failed to open file.\n");
         return NULL;
     }
 
-    int **matrix = allocate_matrix(*matrix_size, *matrix_size);
-    if (!matrix) {
-        perror("Failed to allocate memory for matrix");
+    *size = get_matrix_size_from_file(filename);
+    if (*size <= 0) {
+        LOG("Failed get matrix size.\n");
         close(fd);
         return NULL;
     }
 
-    for (int row = 1; row <= *matrix_size; row++) { 
-        if (get_row(fd, *matrix_size, row, matrix[row-1]) == -1) {
-            fprintf(stderr, "Failed to get row %d\n", row);
-            free_matrix(&matrix, *matrix_size);
-            close(fd);
-            return NULL;
+    int* matrix = allocate_matrix(*size, *size);
+    if (!matrix) {
+        LOG("Failed to allocate space for main matrix.\n");
+        close(fd);
+        return NULL;
+    }
+
+    for (int row = 0; row < *size; row++) {
+        for (int col = 0; col < *size; col++) {
+            int cell_value;
+            if (get_slot(fd, *size, row+1, col+1, &cell_value) == -1) {
+                LOG("Failed to get slot %d,%d.\n", row, col);
+                free(matrix);
+                close(fd);
+                return NULL;
+            }
+            matrix[row * *size + col] = cell_value;
         }
     }
 
-    if (close(fd) == -1) {
-        perror("Failed to close the file");
-    }
+    close(fd);
     return matrix;
 }
 
 // Writes the matrix to a file.
-int write_matrix_to_file(const char *filename, int **matrix, int matrix_size)
-{
+int write_matrix_to_file(const char *filename, int *matrix, int size) {
     int fd = open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd == -1) {
-        perror("Failed to open or create file");
+        LOG("Failed to open/create file.\n");
         return -1;
     }
 
-    for (int row = 0; row < matrix_size; row++) {
-        for (int col = 0; col < matrix_size; col++) {
-            if (set_slot(fd, matrix_size, row+1, col+1, matrix[row][col]) == -1) {
-                fprintf(stderr, "Failed to set cell value at [%d][%d]\n", row + 1, col + 1);
+    for (int row = 0; row < size; row++) {
+        for (int col = 0; col < size; col++) {
+            int cell_value = matrix[row * size + col];
+            if (set_slot(fd, size, row+1, col+1, cell_value) == -1) {
+                LOG("Failed to set slot %d,%d.\n", row, col);
+                free(matrix);
                 close(fd);
-                // unlink(filename);  // Delete the potentially corrupted file?
                 return -1;
             }
         }
     }
 
     if (close(fd) == -1) {
-        perror("Failed to close the file");
+        LOG("Failed to close file");
         return -2;
     }
     return 0;
+}
+
+char* matrix_to_string(int* matrix, int rows, int cols) {
+    // Calculate the needed buffer size. 
+    // Assuming each number can be 10 chars long + 1 space + 1 for '\n'
+    int buffer_size = rows * (cols * 4 + 1) + 1;
+    char* buffer = (char*)malloc(buffer_size);
+
+    if (buffer == NULL) {
+        return NULL;  // Memory allocation failed
+    }
+
+    int offset = 0;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            offset += sprintf(buffer + offset, "%3d ", matrix[i * cols + j]);
+        }
+        buffer[offset - 1] = '\n';  // Replace the last space with a newline
+    }
+    buffer[offset] = '\0';  // Null-terminate the string
+
+    return buffer;
 }
