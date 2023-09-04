@@ -1,12 +1,4 @@
-#include "matrix.h"
 #include "matrix_utils.h"
-#include <fcntl.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include "headers.h"
 
 /*
  * Utility functions for handling matrices stored in files.
@@ -59,16 +51,17 @@ void cleanup(int ***matrix, int matrix_size,
 // Allocates space for a matrix of size rows x cols.
 int** allocate_matrix(int rows, int cols)
 {
-    int **matrix = (int**) malloc(rows * sizeof(int*));
+    int **matrix = (int**) calloc(rows, sizeof(int*));
     if (!matrix) {
         return NULL;
     }
 
     for (int i = 0; i < rows; i++) {
-        matrix[i] = (int*) malloc(cols * sizeof(int));
+        matrix[i] = NULL;
+        matrix[i] = (int*) calloc(cols, sizeof(int));
         if (!matrix[i]) {
             // If allocation fails, free any previously allocated memory
-            free_matrix(matrix, i);
+            free_matrix(&matrix, rows);
             return NULL;
         }
     }
@@ -81,15 +74,15 @@ int get_padding(int proc_rank, int matrix_rows, int depth,
     if (depth == 0)
         return 0;
 
-    int start_row = (proc_rank * rows_per_node);
-    int end_row = start_row + rows_per_node;
+    int start_row = proc_rank * rows_per_node;
+    int end_row = start_row + rows_per_node - 1;
 
     int rows_from_edge;  // Distance from the respective edge (top or bottom)
 
     if (direction == UP) {
         rows_from_edge = start_row;
     } else if (direction == DOWN) {
-        rows_from_edge = matrix_rows - end_row;
+        rows_from_edge = (matrix_rows - 1) - end_row;
     } else {
         return -1;  // Invalid direction
     }
@@ -154,7 +147,7 @@ int** read_matrix_from_file(const char *filename, int *matrix_size)
     for (int row = 1; row <= *matrix_size; row++) { 
         if (get_row(fd, *matrix_size, row, matrix[row-1]) == -1) {
             fprintf(stderr, "Failed to get row %d\n", row);
-            free_matrix(matrix, *matrix_size);
+            free_matrix(&matrix, *matrix_size);
             close(fd);
             return NULL;
         }

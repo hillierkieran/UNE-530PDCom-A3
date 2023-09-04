@@ -11,3 +11,5 @@
 #define FALSE  0
 #define UP -1
 #define DOWN 1
+#define VERBOSE 1  // Set to 1 for verbose output, 0 to disable.
+#define LOG(fmt, ...) do { if (VERBOSE) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)

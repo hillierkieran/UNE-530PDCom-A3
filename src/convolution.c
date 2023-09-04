@@ -19,14 +19,17 @@ bool is_valid_input(int row, int col, int **matrix,
             matrix_rows > 0 &&
             matrix_cols > 0 &&
             depth >= 0 &&
-            is_valid_cell(row, col, matrix_rows, matrix_rows);
+            is_valid_cell(row, col, matrix_rows, matrix_cols);
 }
 
 int apply_convolution(  int row, int col, int **matrix, 
                         int matrix_rows, int matrix_cols, int depth)
 {
     if (!is_valid_input(row, col, matrix, matrix_rows, matrix_cols, depth)) {
-        fprintf(stderr, "Invalid input parameters for apply_convolution.\n");
+        fprintf(stderr, "Invalid input parameters for apply_convolution "
+                "(row:%d, col:%d, matrix:%p, "
+                "matrix_rows:%d, matrix_cols:%d, depth:%d)\n",
+                row, col, (void*)matrix, matrix_rows, matrix_cols, depth);
         return -1;
     }
 
@@ -34,7 +37,12 @@ int apply_convolution(  int row, int col, int **matrix,
         return matrix[row][col];
     }
 
-    int row_offset, col_offset, sum = 0;
+    fprintf(stderr, "Applying convolution to cell %d,%d from matrix:%p "
+            "Starting value = %d\n",
+            row, col, (void*)matrix, matrix[row][col]);
+
+    int sum = 0;
+    int row_offset, col_offset;
     for (row_offset = -depth; row_offset <= depth; row_offset++) {
         for (col_offset = -depth; col_offset <= depth; col_offset++) {
 
@@ -43,24 +51,33 @@ int apply_convolution(  int row, int col, int **matrix,
             int neighbour_col = col + col_offset;
 
             // Ensure that the position is inside the matrix boundaries
-            if (is_valid_cell(  neighbour_row, neighbour_col,
+            if (!is_valid_cell( neighbour_row, neighbour_col,
                                 matrix_rows, matrix_cols)) {
-                
-                // Determine the weight for this neighbour
-                double n_depth = fmax(abs(row_offset), abs(col_offset)) + 1;
-                if (n_depth == 0.0) {
-                    fprintf(stderr, "Divide by zero in apply_convolution.\n");
-                    return -1;
-                }
-
-                double weight = 1 / n_depth;
-
-                // Add the weighted value of the neighbour to the sum
-                sum += matrix[neighbour_row][neighbour_col] * weight;
+                continue;
             }
+            if (neighbour_row == row && neighbour_col == col) {
+                continue;
+            }
+            /*
+            fprintf(stderr, "(Convolution loop) "
+                    "Adding neighbour %d,%d with value:%d to sum\n",
+                    neighbour_row, neighbour_col,
+                    matrix[neighbour_row][neighbour_col]);
+            */
+
+            // Determine the weight for this neighbour
+            double n_depth = fmax(abs(row_offset), abs(col_offset)) + 1;
+            double weight = 1 / n_depth;
+
+            // Add the weighted value of the neighbour to the sum
+            sum += matrix[neighbour_row][neighbour_col] * weight;
         }
     }
 
+    fprintf(stderr, "Convolution of cell %d,%d is complete. "
+            "New value = %d\n",
+            row, col, sum);
+    
     // Return the final weighted sum of neighbours.
     return sum;
 }

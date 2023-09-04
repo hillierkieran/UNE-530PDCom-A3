@@ -36,12 +36,12 @@ a3: $(OBJS)
 
 # Additional operations
 clean:
-	rm -f *~ $(SRCDIR)*.o $(OBJDIR)*
+	rm -r $(OBJDIR)
 
 run:
-	./$(OBJDIR)mkRandomMatrix input_matrix 4 
-	./$(OBJDIR)/getMatrix input_matrix 4
-	mpirun -np 4 $(OBJDIR)a3 input_matrix output_matrix 2
-	./$(OBJDIR)/getMatrix output_matrix 4
+	./$(OBJDIR)mkRandomMatrix $(OBJDIR)input_matrix 4 
+	./$(OBJDIR)getMatrix $(OBJDIR)input_matrix 4
+	mpirun -np 2 $(OBJDIR)a3 $(OBJDIR)input_matrix $(OBJDIR)output_matrix 1
+	./$(OBJDIR)getMatrix $(OBJDIR)output_matrix 4
 
 .PHONY: clean run all directories

@@ -1,15 +1,18 @@
 #ifndef MATRIX_UTILS_H
 #define MATRIX_UTILS_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <fcntl.h>
+#include <math.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "headers.h"
 
-void free_matrix(int **matrix, int rows);
+void free_matrix(int ***matrix, int rows);
 
-void cleanup(int **matrix, int matrix_size, 
-            int **input_submatrix, int input_submatrix_rows, 
-            int **output_submatrix, int output_submatrix_rows,
-            int *cells_per_process, int *starts_per_process);
+void cleanup(int ***matrix, int matrix_size, 
+            int ***input_submatrix, int input_submatrix_rows, 
+            int ***output_submatrix, int output_submatrix_rows,
+            int **cells_per_process, int **starts_per_process);
 
 int** allocate_matrix(int rows, int cols);
 

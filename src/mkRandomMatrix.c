@@ -18,7 +18,7 @@ int main(int argc, char *argv[]){
   }
   for(row = 1; row <= matrix_size; row++)
     for(col = 1; col <= matrix_size; col++)
-      if(set_slot(fd,matrix_size,row,col, random()/1000000) == -1){
+      if(set_slot(fd,matrix_size,row,col, random()/100000000) == -1){
         fprintf(stderr,"set_slot failed at [%d][%d]\n", row, col);
         exit(1); 
       }
