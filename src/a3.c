@@ -1,5 +1,26 @@
+/**
+ * @file    a3.c
+ * @author  Kieran Hillier
+ * @date    4th October 2023
+ * @brief   Distributed matrix convolution using MPI.
+ *
+ * This program reads a matrix from a file, processes it using multiple nodes to
+ * apply convolution, and then writes the processed matrix back to another file.
+ * 
+ * Compilation: Use the provided Makefile, typically `make`
+ * Execution: mpirun -np [number of processes] [path to compiled a3 executable]
+ * [input file] [output file] [depth]
+ */
+
 #include "headers.h"
 
+/**
+ * @brief Main function for the distributed matrix convolution application.
+ * 
+ * @param argc Argument count
+ * @param argv Argument values
+ * @return int Exit status
+ */
 int main(int argc, char **argv)
 {
     int     my_rank,    // Rank of this process (node)
@@ -54,11 +75,15 @@ int main(int argc, char **argv)
         // If zero depth, no work to do. Write input matrix to output file 
         if (depth == 0) {
             LOG("Zero depth set. No work to do\n");
-            int result = write_matrix_to_file(output_filename, matrix, matrix_size);
+            int result = write_matrix_to_file(output_filename,
+                                                matrix, matrix_size);
             if (result == -1) {
-                LOG("Failed to write matrix to output file %s.\n", output_filename);
+                LOG("Failed to write matrix to output file %s.\n",
+                    output_filename);
             } else if (result == -2) {
-                LOG("Failed to close the file after writing matrix to output file %s.\n", output_filename);
+                LOG("Failed to close the file after "
+                    "writing matrix to output file %s.\n",
+                    output_filename);
             }
             LOG("Master process wrote matrix to file\n");
             safe_free(&matrix);
@@ -80,8 +105,10 @@ int main(int argc, char **argv)
 
     // All processes compute the size of their submatrix
     rows_per_node = matrix_size / nproc;
-    my_top_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, UP);
-    my_bottom_padding = get_padding(my_rank, matrix_size, depth, rows_per_node, DOWN);
+    my_top_padding   =  get_padding(my_rank, matrix_size,
+                                    depth, rows_per_node, UP);
+    my_bottom_padding = get_padding(my_rank, matrix_size,
+                                    depth, rows_per_node, DOWN);
     my_padded_rows = my_top_padding + rows_per_node + my_bottom_padding;
     my_start_row = (my_rank * rows_per_node) - my_top_padding;
     my_end_row = my_start_row + my_padded_rows - 1;
@@ -106,8 +133,9 @@ int main(int argc, char **argv)
     // All processes allocate space for their padded submatrix
     my_padded_submatrix = allocate_matrix(my_padded_rows, matrix_size);
     if (!my_padded_submatrix) {
-        LOG("P%d experienced an error while allocating memory for their padded submatrix\n",
-                my_rank);
+        LOG("P%d experienced an error while allocating "
+            "memory for their padded submatrix\n",
+            my_rank);
         if (my_rank == MASTER)
             safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
@@ -124,8 +152,9 @@ int main(int argc, char **argv)
     cells_per_process  = (int *) malloc(nproc * sizeof(int));
     starts_per_process = (int *) malloc(nproc * sizeof(int));
     if (!cells_per_process || !starts_per_process) {
-        LOG("P%d experienced an error while allocating memory for cells_per_process or starts_per_process\n",
-                my_rank);
+        LOG("P%d experienced an error while allocating memory for "
+            "cells_per_process or starts_per_process\n",
+            my_rank);
         if (my_rank == MASTER)
             safe_free(&matrix);
         safe_free(&my_padded_submatrix);
@@ -141,21 +170,28 @@ int main(int argc, char **argv)
     // to send to each process
     if (my_rank == MASTER) {
         for(int proc = 0; proc < nproc; proc++) {
-            int top_padding = get_padding(proc, matrix_size, depth, rows_per_node, UP);
-            int bottom_padding = get_padding(proc, matrix_size, depth, rows_per_node, DOWN);
+            int top_padding   =  get_padding(proc, matrix_size,
+                                            depth, rows_per_node, UP);
+            int bottom_padding = get_padding(proc, matrix_size,
+                                            depth, rows_per_node, DOWN);
             int padded_portion = top_padding + rows_per_node + bottom_padding;
 
             cells_per_process[proc] = padded_portion * matrix_size;
-            starts_per_process[proc] = ((proc * rows_per_node) - top_padding) * matrix_size;
-            LOG("P%d will be given %d cells (%d rows) at starting position %d (in row %d)\n",
+            starts_per_process[proc] = ((proc * rows_per_node) - top_padding)
+                                        * matrix_size;
+            LOG("P%d will be given %d cells (%d rows) "
+                "at starting position %d (in row %d)\n",
                 proc, cells_per_process[proc], padded_portion,
-                starts_per_process[proc], starts_per_process[proc] / matrix_size);
+                starts_per_process[proc],
+                starts_per_process[proc] / matrix_size);
         }
-        LOG("Master process has computed cells_per_process and starts_per_process\n");
+        LOG("Master process has computed "
+            "cells_per_process and starts_per_process\n");
     }
 
     // Broadcasting cells_per_process and starts_per_process to all processes
-    mpi_err = MPI_Bcast(cells_per_process, nproc, MPI_INT, MASTER, MPI_COMM_WORLD);
+    mpi_err = MPI_Bcast(cells_per_process, nproc,
+                        MPI_INT, MASTER, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
         LOG("P%d experienced an error during broadcast of cells_per_process\n",
                 my_rank);
@@ -163,7 +199,8 @@ int main(int argc, char **argv)
             safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
-    mpi_err = MPI_Bcast(starts_per_process, nproc, MPI_INT, MASTER, MPI_COMM_WORLD);
+    mpi_err = MPI_Bcast(starts_per_process, nproc,
+                        MPI_INT, MASTER, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
         LOG("P%d experienced an error during broadcast of starts_per_process\n",
                 my_rank);
@@ -171,7 +208,8 @@ int main(int argc, char **argv)
             safe_free(&matrix);
         MPI_Abort(MPI_COMM_WORLD, mpi_err);
     }
-    LOG("P%d has received cells_per_process[me]=%d and starts_per_process[me]=%d\n",
+    LOG("P%d has received cells_per_process[me]=%d "
+        "and starts_per_process[me]=%d\n",
         my_rank, cells_per_process[my_rank], starts_per_process[my_rank]);
 
 
@@ -184,9 +222,9 @@ int main(int argc, char **argv)
         " - root    = %d\n",
         my_rank,                       // Process rank
         (void*)matrix,                 // send buffer address
-        (void*)cells_per_process,      // address of the array of elements to each process
+        (void*)cells_per_process,      // addr to array of cells to each process
         cells_per_process[my_rank],
-        (void*)starts_per_process,     // address of the array of start element per process
+        (void*)starts_per_process,     // addr to array of 1st cells per process
         starts_per_process[my_rank],
         (void*)my_padded_submatrix,    // receive buffer address
         my_padded_rows * matrix_size,  // elements in receive buffer
@@ -234,7 +272,8 @@ int main(int argc, char **argv)
 
     safe_free(&cells_per_process);
     safe_free(&starts_per_process);
-    LOG("P%d has freed their cells_per_process and starts_per_process\n", my_rank);
+    LOG("P%d has freed their cells_per_process and starts_per_process\n",
+        my_rank);
 
 
     // All processes allocate space for their processed submatrix
@@ -262,15 +301,19 @@ int main(int argc, char **argv)
     }
 
     // All processes apply the convolution filter on their portion
-    LOG("P%d will apply convolution on %d rows (%d upper padding, %d working rows, %d lower padding)\n",
-        my_rank, my_padded_rows, my_top_padding, rows_per_node, my_bottom_padding);
-    for (int row = my_top_padding; row < (rows_per_node + my_top_padding); row++) {
+    LOG("P%d will apply convolution on %d rows "
+        "(%d upper padding, %d working rows, %d lower padding)\n",
+        my_rank, my_padded_rows,
+        my_top_padding, rows_per_node, my_bottom_padding);
+        
+    for (int row=my_top_padding; row < (rows_per_node+my_top_padding); row++) {
         for (int col = 0; col < matrix_size; col++) {
             int sum = apply_convolution(row, col, my_padded_submatrix,
                                         my_padded_rows, matrix_size, depth);
             if (sum < 0) {
-                LOG("P%d experienced an error in apply_convolution at local row %d and col %d of their padded submatrix\n",
-                        my_rank, row, col);
+                LOG("P%d experienced an error in apply_convolution at "
+                    "local row %d and col %d of their padded submatrix\n",
+                    my_rank, row, col);
                 if (my_rank == MASTER)
                     safe_free(&matrix);
                 safe_free(&my_padded_submatrix);
@@ -283,7 +326,8 @@ int main(int argc, char **argv)
     LOG("P%d has finished processing their submatix\n", my_rank);
 
     safe_free(&my_padded_submatrix);
-    LOG("P%d has freed their padded submatix. Waiting for gather call\n", my_rank);
+    LOG("P%d has freed their padded submatix. Waiting for gather call\n",
+        my_rank);
 
     
     LOG("Before Gather, P%d's data is:\n"
@@ -341,7 +385,9 @@ int main(int argc, char **argv)
         if (result == -1) {
             LOG("Failed to write matrix to output file %s.\n", output_filename);
         } else if (result == -2) {
-            LOG("Failed to close the file after writing matrix to output file %s.\n", output_filename);
+            LOG("Failed to close the file after "
+            "writing matrix to output file %s.\n",
+            output_filename);
         }
         LOG("Master process wrote matrix to file\n");
         safe_free(&matrix);

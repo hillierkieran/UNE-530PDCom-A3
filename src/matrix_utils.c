@@ -1,17 +1,23 @@
 #include "matrix_utils.h"
 
-/*
- * Utility functions for handling matrices stored in files.
- * - Assumes matrices are square.
- * - Provides functionality to read, write, allocate, and free matrices.
+/**
+ * @brief Convert 2D matrix indices to 1D index for arrays.
+ * 
+ * @param row The row number in the matrix.
+ * @param col The column number in the matrix.
+ * @param matrix_cols Total columns in the matrix.
+ * @return int The corresponding index in a 1D array representation.
  */
-
 int get_i(int row, int col, int matrix_cols)
 {
     return row * matrix_cols + col;
 }
 
-// Deallocates the space used by the matrix.
+/**
+ * @brief Safely free allocated memory and set pointer to NULL.
+ * 
+ * @param int_array Pointer to the int array to be freed.
+ */
 void safe_free(int **int_array)
 {
     if (*int_array) {
@@ -20,7 +26,13 @@ void safe_free(int **int_array)
     }
 }
 
-// Allocates space for a matrix of size rows x cols.
+/**
+ * @brief Allocate space for a matrix.
+ * 
+ * @param rows Number of rows.
+ * @param cols Number of columns.
+ * @return int* Pointer to the allocated matrix. NULL if allocation failed.
+ */
 int* allocate_matrix(int rows, int cols)
 {
     int *int_array = (int*) calloc(rows * cols, sizeof(int));
@@ -31,6 +43,16 @@ int* allocate_matrix(int rows, int cols)
     return int_array;
 }
 
+/**
+ * @brief Get the amount of padding required for a process.
+ * 
+ * @param proc_rank Rank of the process.
+ * @param matrix_size Size of the matrix (number of rows or columns).
+ * @param depth Depth of the convolution.
+ * @param rows_per_node Rows assigned to each process.
+ * @param direction Direction to check padding (UP = -1, DOWN = 1).
+ * @return Number of rows of padding required.
+ */
 int get_padding(int proc_rank, int matrix_rows, int depth,
                 int rows_per_node, int direction)
 {
@@ -58,7 +80,16 @@ int get_padding(int proc_rank, int matrix_rows, int depth,
     return depth;
 }
 
-// Computes sub-matrix portion for a process
+/**
+ * @brief Calculate the number of rows a process needs to handle 
+ *        after considering padding.
+ * 
+ * @param proc_rank Rank of the process.
+ * @param matrix_size Size of the matrix (number of rows or columns).
+ * @param depth Depth of the convolution.
+ * @param rows_per_node Rows assigned to each process.
+ * @return Total number of rows for the process after adding padding.
+ */
 int get_padded_rows(int proc_rank, int matrix_size, int depth,
                     int rows_per_node)
 {
@@ -67,7 +98,13 @@ int get_padded_rows(int proc_rank, int matrix_size, int depth,
     return top_padding + rows_per_node + bottom_padding;
 }
 
-// Gets the size of the matrix from the file.
+/**
+ * @brief Get the size of a matrix from a file.
+ *
+ * @param filename Name of the file to read from.
+ * @return Size of the matrix if successful,
+ *         -1 if there's an error reading the file.
+ */
 int get_matrix_size_from_file(const char *filename)
 {
     struct stat st;
@@ -87,7 +124,13 @@ int get_matrix_size_from_file(const char *filename)
     return matrix_size;
 }
 
-// Reads the matrix from a file.
+/**
+ * @brief Read a matrix from a file.
+ * 
+ * @param filename Name of the file to read from.
+ * @param matrix_size Pointer to an int where the matrix's size will be stored.
+ * @return Pointer to the read matrix. NULL if reading fails.
+ */
 int* read_matrix_from_file(const char *filename, int *size) {
     int fd = open(filename, O_RDONLY);
     if (fd == -1) {
@@ -126,7 +169,16 @@ int* read_matrix_from_file(const char *filename, int *size) {
     return matrix;
 }
 
-// Writes the matrix to a file.
+/**
+ * @brief Write a matrix to a file.
+ * 
+ * @param filename Name of the file to write to.
+ * @param matrix Pointer to the matrix to write.
+ * @param matrix_size Size of the matrix to write.
+ * @return 0 if the write operation succeeds,
+ *        -1 if failed to write,
+ *        -2 if failed to close the file.
+ */
 int write_matrix_to_file(const char *filename, int *matrix, int size) {
     int fd = open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd == -1) {
@@ -153,10 +205,18 @@ int write_matrix_to_file(const char *filename, int *matrix, int size) {
     return 0;
 }
 
+/**
+ * @brief Convert a matrix to a string for display.
+ * 
+ * @param matrix Pointer to the matrix.
+ * @param rows Number of rows in the matrix.
+ * @param cols Number of columns in the matrix.
+ * @return char* Pointer to the string representation of the matrix.
+ */
 char* matrix_to_string(int* matrix, int rows, int cols) {
     // Calculate the needed buffer size. 
     // Assuming each number can be 10 chars long + 1 space + 1 for '\n'
-    int buffer_size = rows * (cols * 4 + 1) + 1;
+    int buffer_size = rows * (cols * 5 + 1) + 1;
     char* buffer = (char*)malloc(buffer_size);
 
     if (buffer == NULL) {

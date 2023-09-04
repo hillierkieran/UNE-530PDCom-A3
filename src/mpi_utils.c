@@ -1,7 +1,28 @@
+/**
+ * @file    mpi_utils.c
+ * @author  Kieran Hillier
+ * @date    4 Oct 2023
+ * @brief   Implementation of MPI utilities functions.
+ *
+ * Contains the implementation of utility functions declared in mpi_utils.h for
+ * initializing and managing MPI-related tasks.
+ */
+
 #include "mpi.h"
 #include "mpi_utils.h"
 #include <stdio.h>
 
+/**
+ * @brief Sets up the MPI environment.
+ *
+ * This function initializes the MPI environment, sets error handlers,
+ * and retrieves the rank and number of processes.
+ * 
+ * @param [in,out] argc The number of arguments from the main function.
+ * @param [in,out] argv The arguments from the main function.
+ * @param [out] rank The rank of the current process.
+ * @param [out] nproc The total number of processes.
+ */
 void mpi_setup(int *argc, char ***argv, int *rank, int *nproc)
 {
     int mpi_err;

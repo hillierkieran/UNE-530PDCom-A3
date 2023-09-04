@@ -1,9 +1,27 @@
+/**
+ * @file    convolution.c
+ * @author  Kieran Hillier
+ * @date    4th October 2023
+ * @brief   Implementation of convolution-related operations.
+ *
+ * The functions defined in this file perform convolution operations on matrices
+ */
+
 #include "convolution.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
+/**
+ * @brief Determines if the coordinates are within matrix bounds.
+ * 
+ * @param row Row coordinate.
+ * @param col Column coordinate.
+ * @param matrix_rows Number of rows in the matrix.
+ * @param matrix_cols Number of columns in the matrix.
+ * @return 1 if within bounds, 0 otherwise.
+ */
 bool is_valid_cell(int row, int col, int matrix_rows, int matrix_cols)
 {
     return  row >= 0 &&
@@ -12,6 +30,17 @@ bool is_valid_cell(int row, int col, int matrix_rows, int matrix_cols)
             col < matrix_cols;
 }
 
+/**
+ * @brief Validates the input parameters for convolution operations.
+ * 
+ * @param row Row coordinate.
+ * @param col Column coordinate.
+ * @param matrix Pointer to the matrix data.
+ * @param matrix_rows Number of rows in the matrix.
+ * @param matrix_cols Number of columns in the matrix.
+ * @param depth Convolution depth.
+ * @return true if all parameters are valid, false otherwise.
+ */
 bool is_valid_input(int row, int col, int *matrix,
                     int matrix_rows, int matrix_cols, int depth)
 {
@@ -22,6 +51,23 @@ bool is_valid_input(int row, int col, int *matrix,
             is_valid_cell(row, col, matrix_rows, matrix_cols);
 }
 
+/**
+ * @brief Applies convolution operation on the specified cell of the matrix.
+ * 
+ * This function takes in the coordinates of a matrix cell, the matrix itself,
+ * its dimensions, and a depth value to perform convolution. The function
+ * computes the weighted sum of the specified cell's neighbours up to the
+ * provided depth.
+ *
+ * @param row Row coordinate of the cell.
+ * @param col Column coordinate of the cell.
+ * @param matrix Pointer to the matrix.
+ * @param matrix_rows Number of rows in the matrix.
+ * @param matrix_cols Number of columns in the matrix.
+ * @param depth Depth for convolution operation.
+ * @return Sum after applying convolution.
+ *         Returns -1 if the parameters are invalid.
+ */
 int apply_convolution(  int row, int col, int *matrix, 
                         int matrix_rows, int matrix_cols, int depth)
 {
@@ -81,7 +127,7 @@ int apply_convolution(  int row, int col, int *matrix,
             "New value = %d\n",
             row, col, sum);
     */
-   
+
     // Return the final weighted sum of neighbours.
     return sum;
 }
